@@ -1,7 +1,9 @@
+mod font;
 mod input;
 mod instruction;
 
 use self::{
+    font::FONT,
     input::{get_processed_input, Keys},
     instruction::Chip8Instruction,
 };
@@ -12,34 +14,20 @@ use winit_input_helper::WinitInputHelper;
 
 pub type Screen = [[bool; SCREEN_WIDTH]; SCREEN_HEIGHT];
 type Registers = [u8; 16];
+type RGBA = [u8; 4];
 
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
-const SIZE_4KB: usize = 0x1000;
-const FONT: [u8; 5 * 0x10] = [
-    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-    0x20, 0x60, 0x20, 0x20, 0x70, // 1
-    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
-];
+const MEMORY_SIZE: usize = 0x1000; // 4KB
+
+const COLOR_FG: RGBA = [0x5e, 0x48, 0xe8, 0xff];
+const COLOR_BG: RGBA = [0x11, 0x11, 0x11, 0xff];
 
 pub struct Chip8 {
     pub pixels: Pixels,
     pub input: WinitInputHelper,
     pub screen: Screen,
-    memory: [u8; SIZE_4KB],
+    memory: [u8; MEMORY_SIZE],
     pc: usize,
     index: usize,
     stack: Vec<usize>,
@@ -53,7 +41,7 @@ pub struct Chip8 {
 
 impl Chip8 {
     pub fn new(pixels: Pixels) -> Self {
-        let mut memory = [0u8; SIZE_4KB];
+        let mut memory = [0u8; MEMORY_SIZE];
 
         // Load font
         memory[0..FONT.len()].copy_from_slice(&FONT);
@@ -80,7 +68,7 @@ impl Chip8 {
 
         let file_data = fs::read(filename)?;
 
-        if file_data.len() > SIZE_4KB - PROGRAM_START {
+        if file_data.len() > MEMORY_SIZE - PROGRAM_START {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "File is too large to fit into memory.",
@@ -118,11 +106,7 @@ impl Chip8 {
             let y = (i / SCREEN_WIDTH as usize) as usize;
             let screen_pixel = screen[y][x];
 
-            let rgba = if screen_pixel {
-                [0x5e, 0x48, 0xe8, 0xff]
-            } else {
-                [0x11, 0x11, 0x11, 0xff]
-            };
+            let rgba = if screen_pixel { COLOR_FG } else { COLOR_BG };
 
             frame_pixel.copy_from_slice(&rgba);
         }
@@ -134,90 +118,6 @@ impl Chip8 {
         if toggle_pause {
             self.paused = !self.paused;
         }
-    }
-
-    fn update_timers(&mut self) {
-        self.dt -= if self.dt > 0 { 1 } else { 0 };
-        self.st -= if self.st > 0 { 1 } else { 0 };
-    }
-
-    fn execute_instruction(&mut self, instruction: Chip8Instruction) {
-        match instruction {
-            Chip8Instruction::SYS(_) => todo!(),
-            Chip8Instruction::CLS => self.screen = [[false; SCREEN_WIDTH]; SCREEN_HEIGHT],
-            Chip8Instruction::RET => self.pc = self.stack.pop().unwrap(),
-            Chip8Instruction::JP(nnn) => self.pc = nnn - 2,
-            Chip8Instruction::CALL(nnn) => {
-                self.stack.push(self.pc);
-                self.pc = nnn - 2;
-            }
-            Chip8Instruction::SEVxByte(x, kk) => self.pc += if self.v[x] == kk { 2 } else { 0 },
-            Chip8Instruction::SNEVxByte(x, kk) => self.pc += if self.v[x] != kk { 2 } else { 0 },
-            Chip8Instruction::SEVxVy(x, y) => self.pc += if self.v[x] == self.v[y] { 2 } else { 0 },
-            Chip8Instruction::LDVxByte(x, kk) => self.v[x] = kk,
-            Chip8Instruction::ADDVxByte(x, kk) => self.v[x] = self.v[x].wrapping_add(kk),
-            Chip8Instruction::LDVxVy(x, y) => self.v[x] = self.v[y],
-            Chip8Instruction::ORVxVy(x, y) => self.v[x] = self.v[x] | self.v[y],
-            Chip8Instruction::ANDVxVy(x, y) => self.v[x] = self.v[x] & self.v[y],
-            Chip8Instruction::XORVxVy(x, y) => self.v[x] = self.v[x] ^ self.v[y],
-            Chip8Instruction::ADDVxVy(x, y) => {
-                let result = self.v[x] as u16 + self.v[y] as u16;
-                self.v[0xF] = if result > 255 { 1 } else { 0 };
-                self.v[x] = result as u8;
-            }
-            Chip8Instruction::SUBVxVy(x, y) => {
-                self.v[0xF] = if self.v[x] > self.v[y] { 1 } else { 0 };
-                self.v[x] = self.v[x].wrapping_sub(self.v[y]);
-            }
-            Chip8Instruction::SHRVx(x) => {
-                self.v[0xF] = self.v[x] & 0b1;
-                self.v[x] = self.v[x].wrapping_div(2);
-            }
-            Chip8Instruction::SUBNVxVy(x, y) => {
-                self.v[0xF] = if self.v[y] > self.v[x] { 1 } else { 0 };
-                self.v[x] = self.v[y].wrapping_sub(self.v[x]);
-            }
-            Chip8Instruction::SHLVx(x) => {
-                self.v[0xF] = self.v[x] & 0b1;
-                self.v[x] = self.v[x].wrapping_mul(2);
-            }
-            Chip8Instruction::SNEVxVy(x, y) => {
-                self.pc += if self.v[x] != self.v[y] { 2 } else { 0 }
-            }
-            Chip8Instruction::LDI(nnn) => self.index = nnn,
-            Chip8Instruction::JP0(nnn) => self.pc = nnn + self.v[0] as usize,
-            Chip8Instruction::RNDVxByte(x, kk) => self.v[x] = self.rng.gen_range(0..=255) & kk,
-            Chip8Instruction::DRWVxVyNibble(x, y, n) => self.draw_sprite(x, y, n),
-            Chip8Instruction::SKPVx(x) => {
-                self.pc += if self.keys[self.v[x] as usize] { 2 } else { 0 }
-            }
-            Chip8Instruction::SKNPVx(x) => {
-                self.pc += if !self.keys[self.v[x] as usize] { 2 } else { 0 }
-            }
-            Chip8Instruction::LDVxDT(x) => self.v[x] = self.dt,
-            Chip8Instruction::LDVxK(_) => todo!(),
-            Chip8Instruction::LDDTVx(x) => self.dt = self.v[x],
-            Chip8Instruction::LDSTVx(x) => self.st = self.v[x],
-            Chip8Instruction::ADDIVx(x) => self.index += self.v[x] as usize,
-            Chip8Instruction::LDFVx(x) => self.index = self.v[x] as usize * 5,
-            Chip8Instruction::LDBVx(x) => {
-                let value = self.v[x];
-                self.memory[self.index] = value / 100;
-                self.memory[self.index + 1] = (value % 100) / 10;
-                self.memory[self.index + 2] = value % 10;
-            }
-            Chip8Instruction::LDIVx(x) => {
-                for i in 0..=x as usize {
-                    self.memory[self.index + i] = self.v[i];
-                }
-            }
-            Chip8Instruction::LDVxMem(x) => {
-                for i in 0..=x as usize {
-                    self.v[i] = self.memory[self.index + i];
-                }
-            }
-            Chip8Instruction::Unknown => {}
-        };
     }
 
     fn draw_sprite(&mut self, x: usize, y: usize, n: u8) {
@@ -238,5 +138,84 @@ impl Chip8 {
         }
 
         self.v[0xF] = collision as u8;
+    }
+
+    fn update_timers(&mut self) {
+        self.dt -= if self.dt > 0 { 1 } else { 0 };
+        self.st -= if self.st > 0 { 1 } else { 0 };
+    }
+
+    fn execute_instruction(&mut self, instruction: Chip8Instruction) {
+        use Chip8Instruction::*;
+        match instruction {
+            SYS(_) => todo!(),
+            CLS => self.screen = [[false; SCREEN_WIDTH]; SCREEN_HEIGHT],
+            RET => self.pc = self.stack.pop().unwrap(),
+            JP(nnn) => self.pc = nnn - 2,
+            CALL(nnn) => {
+                self.stack.push(self.pc);
+                self.pc = nnn - 2;
+            }
+            SEVxByte(x, kk) => self.pc += if self.v[x] == kk { 2 } else { 0 },
+            SNEVxByte(x, kk) => self.pc += if self.v[x] != kk { 2 } else { 0 },
+            SEVxVy(x, y) => self.pc += if self.v[x] == self.v[y] { 2 } else { 0 },
+            LDVxByte(x, kk) => self.v[x] = kk,
+            ADDVxByte(x, kk) => self.v[x] = self.v[x].wrapping_add(kk),
+            LDVxVy(x, y) => self.v[x] = self.v[y],
+            ORVxVy(x, y) => self.v[x] = self.v[x] | self.v[y],
+            ANDVxVy(x, y) => self.v[x] = self.v[x] & self.v[y],
+            XORVxVy(x, y) => self.v[x] = self.v[x] ^ self.v[y],
+            ADDVxVy(x, y) => {
+                let result = self.v[x] as u16 + self.v[y] as u16;
+                self.v[0xF] = if result > 255 { 1 } else { 0 };
+                self.v[x] = result as u8;
+            }
+            SUBVxVy(x, y) => {
+                self.v[0xF] = if self.v[x] > self.v[y] { 1 } else { 0 };
+                self.v[x] = self.v[x].wrapping_sub(self.v[y]);
+            }
+            SHRVx(x) => {
+                self.v[0xF] = self.v[x] & 0b1;
+                self.v[x] = self.v[x].wrapping_div(2);
+            }
+            SUBNVxVy(x, y) => {
+                self.v[0xF] = if self.v[y] > self.v[x] { 1 } else { 0 };
+                self.v[x] = self.v[y].wrapping_sub(self.v[x]);
+            }
+            SHLVx(x) => {
+                self.v[0xF] = self.v[x] & 0b1;
+                self.v[x] = self.v[x].wrapping_mul(2);
+            }
+            SNEVxVy(x, y) => self.pc += if self.v[x] != self.v[y] { 2 } else { 0 },
+            LDI(nnn) => self.index = nnn,
+            JP0(nnn) => self.pc = nnn + self.v[0] as usize,
+            RNDVxByte(x, kk) => self.v[x] = self.rng.gen_range(0..=255) & kk,
+            DRWVxVyNibble(x, y, n) => self.draw_sprite(x, y, n),
+            SKPVx(x) => self.pc += if self.keys[self.v[x] as usize] { 2 } else { 0 },
+            SKNPVx(x) => self.pc += if !self.keys[self.v[x] as usize] { 2 } else { 0 },
+            LDVxDT(x) => self.v[x] = self.dt,
+            LDVxK(_) => todo!(),
+            LDDTVx(x) => self.dt = self.v[x],
+            LDSTVx(x) => self.st = self.v[x],
+            ADDIVx(x) => self.index += self.v[x] as usize,
+            LDFVx(x) => self.index = self.v[x] as usize * 5,
+            LDBVx(x) => {
+                let value = self.v[x];
+                self.memory[self.index] = value / 100;
+                self.memory[self.index + 1] = (value % 100) / 10;
+                self.memory[self.index + 2] = value % 10;
+            }
+            LDIVx(x) => {
+                for i in 0..=x as usize {
+                    self.memory[self.index + i] = self.v[i];
+                }
+            }
+            LDVxMem(x) => {
+                for i in 0..=x as usize {
+                    self.v[i] = self.memory[self.index + i];
+                }
+            }
+            Unknown => {}
+        };
     }
 }
