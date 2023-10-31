@@ -1,15 +1,13 @@
-#![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
 mod chip8;
-
-use std::sync::Arc;
 
 use chip8::{Chip8, SCREEN_HEIGHT, SCREEN_WIDTH};
 use error_iter::ErrorIter as _;
 use game_loop::game_loop;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
+use std::sync::Arc;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::VirtualKeyCode;
 use winit::event_loop::EventLoop;
@@ -53,22 +51,21 @@ fn main() -> Result<(), Error> {
         }
     };
     let handle_events = |g: &mut Game, event: &winit::event::Event<'_, ()>| {
-        if g.game.input.update(event) {
-            // Update controls
-            g.game.update_input();
-            // Close events
-            if g.game.input.key_pressed(VirtualKeyCode::Escape)
-                || g.game.input.close_requested()
-            {
+        if !g.game.input.update(event) {
+            return;
+        }
+        // Update controls
+        g.game.update_input();
+        // Close events
+        if g.game.input.key_pressed(VirtualKeyCode::Escape) || g.game.input.close_requested() {
+            g.exit();
+            return;
+        }
+        // Resize the window
+        if let Some(size) = g.game.input.window_resized() {
+            if let Err(err) = g.game.pixels.resize_surface(size.width, size.height) {
+                log_error("pixels.resize_surface", err);
                 g.exit();
-                return;
-            }
-            // Resize the window
-            if let Some(size) = g.game.input.window_resized() {
-                if let Err(err) = g.game.pixels.resize_surface(size.width, size.height) {
-                    log_error("pixels.resize_surface", err);
-                    g.exit();
-                }
             }
         }
     };
