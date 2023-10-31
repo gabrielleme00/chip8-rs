@@ -18,6 +18,8 @@ use winit::window::WindowBuilder;
 const WIDTH: u32 = SCREEN_WIDTH as u32;
 const HEIGHT: u32 = SCREEN_HEIGHT as u32;
 const SCALE: f64 = 12.0;
+const UPS: u32 = 500;
+const MAX_FRAME_TIME: f64 = 0.1;
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -41,46 +43,45 @@ fn main() -> Result<(), Error> {
     let mut chip8 = Chip8::new(pixels);
     chip8.load_file("roms/particle.ch8").unwrap();
 
-    let window = Arc::new(window);
+    type Game = game_loop::GameLoop<Chip8, game_loop::Time, Arc<winit::window::Window>>;
+    let update = |g: &mut Game| g.game.run_cycle();
+    let render = |g: &mut Game| {
+        g.game.render();
+        if let Err(err) = g.game.pixels.render() {
+            log_error("pixels.render", err);
+            g.exit();
+        }
+    };
+    let handle_events = |g: &mut Game, event: &winit::event::Event<'_, ()>| {
+        if g.game.input.update(event) {
+            // Update controls
+            g.game.update_input();
+            // Close events
+            if g.game.input.key_pressed(VirtualKeyCode::Escape)
+                || g.game.input.close_requested()
+            {
+                g.exit();
+                return;
+            }
+            // Resize the window
+            if let Some(size) = g.game.input.window_resized() {
+                if let Err(err) = g.game.pixels.resize_surface(size.width, size.height) {
+                    log_error("pixels.resize_surface", err);
+                    g.exit();
+                }
+            }
+        }
+    };
+
     game_loop(
         event_loop,
-        window,
+        Arc::new(window),
         chip8,
-        600,
-        0.1,
-        move |g| {
-            // Update
-            g.game.run_cycle();
-        },
-        move |g| {
-            // Render
-            g.game.render();
-            if let Err(err) = g.game.pixels.render() {
-                log_error("pixels.render", err);
-                g.exit();
-            }
-        },
-        |g, event| {
-            // Events
-            if g.game.input.update(event) {
-                // Update controls
-                g.game.update_input();
-                // Close events
-                if g.game.input.key_pressed(VirtualKeyCode::Escape)
-                    || g.game.input.close_requested()
-                {
-                    g.exit();
-                    return;
-                }
-                // Resize the window
-                if let Some(size) = g.game.input.window_resized() {
-                    if let Err(err) = g.game.pixels.resize_surface(size.width, size.height) {
-                        log_error("pixels.resize_surface", err);
-                        g.exit();
-                    }
-                }
-            }
-        },
+        UPS,
+        MAX_FRAME_TIME,
+        update,
+        render,
+        handle_events,
     );
 }
 
