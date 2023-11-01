@@ -9,7 +9,6 @@ use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::sync::Arc;
 use winit::dpi::{LogicalSize, PhysicalSize};
-use winit::event::VirtualKeyCode;
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
@@ -42,6 +41,7 @@ fn main() -> Result<(), Error> {
     chip8.load_file("roms/particle.ch8").unwrap();
 
     type Game = game_loop::GameLoop<Chip8, game_loop::Time, Arc<winit::window::Window>>;
+    type GameEvent<'a> = winit::event::Event<'a, ()>;
     let update = |g: &mut Game| g.game.run_cycle();
     let render = |g: &mut Game| {
         g.game.render();
@@ -50,14 +50,12 @@ fn main() -> Result<(), Error> {
             g.exit();
         }
     };
-    let handle_events = |g: &mut Game, event: &winit::event::Event<'_, ()>| {
+    let handle_events = |g: &mut Game, event: &GameEvent| {
         if !g.game.input.update(event) {
             return;
         }
-        // Update controls
-        g.game.update_input();
-        // Close events
-        if g.game.input.key_pressed(VirtualKeyCode::Escape) || g.game.input.close_requested() {
+        g.game.update_controls();
+        if g.game.should_close() {
             g.exit();
             return;
         }

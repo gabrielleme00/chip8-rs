@@ -9,6 +9,7 @@ use self::{
 };
 use pixels::Pixels;
 use rand::{rngs::ThreadRng, Rng};
+use winit::event::VirtualKeyCode;
 use std::fs;
 use winit_input_helper::WinitInputHelper;
 
@@ -112,12 +113,17 @@ impl Chip8 {
         }
     }
 
-    pub fn update_input(&mut self) {
+    pub fn update_controls(&mut self) {
         let (keys, toggle_pause) = get_processed_input(&self.input);
         self.keys = keys;
         if toggle_pause {
             self.paused = !self.paused;
         }
+    }
+
+    pub fn should_close(&self) -> bool {
+        let esc_pressed = self.input.key_pressed(VirtualKeyCode::Escape);
+        esc_pressed || self.input.close_requested()
     }
 
     fn draw_sprite(&mut self, x: usize, y: usize, n: u8) {
