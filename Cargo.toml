@@ -10,6 +10,7 @@ optimize = ["log/release_max_level_warn"]
 default = ["optimize"]
 
 [dependencies]
+clap = { version = "4.5.3", features = ["derive"] }
 env_logger = "0.10"
 error-iter = "0.4"
 game-loop = { version = "1.0.0", features = ["winit"] }

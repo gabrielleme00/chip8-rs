@@ -83,7 +83,7 @@ impl Chip8 {
         Ok(())
     }
 
-    pub fn run_cycle(&mut self) {
+    pub fn run_cycle(&mut self, debug: bool) {
         if self.paused {
             return;
         }
@@ -92,7 +92,9 @@ impl Chip8 {
         let instruction = Chip8Instruction::from_opcode(opcode);
         let disassemble = instruction.disassemble();
 
-        println!("[0x{:04X}] => 0x{:04X} | {}", self.pc, opcode, disassemble);
+        if debug {
+            println!("[0x{:04X}] => 0x{:04X} | {}", self.pc, opcode, disassemble);
+        }
 
         self.execute_instruction(instruction);
         self.update_timers();
