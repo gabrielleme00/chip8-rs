@@ -28,8 +28,22 @@ pub fn get_processed_input(input: &WinitInputHelper) -> (Keys, Pause) {
     let toggle_pause = input.key_pressed(VirtualKeyCode::P);
 
     let keys = [
-        key_1, key_2, key_3, key_c, key_4, key_5, key_6, key_d, key_7, key_8, key_9, key_e, key_a,
-        key_0, key_b, key_f,
+        key_0,
+        key_1,
+        key_2,
+        key_3,
+        key_4,
+        key_5,
+        key_6,
+        key_7,
+        key_8,
+        key_9,
+        key_a,
+        key_b,
+        key_c,
+        key_d,
+        key_e,
+        key_f,
     ];
 
     (keys, toggle_pause)

@@ -1,16 +1,18 @@
+mod audio;
 mod font;
 mod input;
 mod instruction;
 
 use self::{
+    audio::Audio,
     font::FONT,
     input::{get_processed_input, Keys},
-    instruction::Chip8Instruction,
+    instruction::Instruction,
 };
 use pixels::Pixels;
 use rand::{rngs::ThreadRng, Rng};
-use winit::event::VirtualKeyCode;
 use std::fs;
+use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
 
 pub type Screen = [[bool; SCREEN_WIDTH]; SCREEN_HEIGHT];
@@ -38,6 +40,7 @@ pub struct Chip8 {
     keys: Keys,
     rng: ThreadRng,
     paused: bool,
+    audio: Audio,
 }
 
 impl Chip8 {
@@ -61,6 +64,7 @@ impl Chip8 {
             keys: [false; 16],
             rng: rand::thread_rng(),
             paused: false,
+            audio: Audio::new(),
         }
     }
 
@@ -72,14 +76,15 @@ impl Chip8 {
         if file_data.len() > MEMORY_SIZE - PROGRAM_START {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "File is too large to fit into memory.",
+                "File is too large to fit into memory",
             ));
         }
 
         let program_end = PROGRAM_START + file_data.len();
         self.memory[PROGRAM_START..program_end].copy_from_slice(&file_data);
 
-        println!("File loaded successfully.");
+        println!("[I/O] ROM file loaded");
+
         Ok(())
     }
 
@@ -89,7 +94,7 @@ impl Chip8 {
         }
 
         let opcode = (self.memory[self.pc] as u16) << 8 | self.memory[self.pc + 1] as u16;
-        let instruction = Chip8Instruction::from_opcode(opcode);
+        let instruction = Instruction::from_opcode(opcode);
         let disassemble = instruction.disassemble();
 
         if debug {
@@ -99,6 +104,8 @@ impl Chip8 {
         self.execute_instruction(instruction);
         self.update_timers();
         self.pc += 2;
+
+        self.audio.set_active(self.st > 0);
     }
 
     pub fn render(&mut self) {
@@ -153,8 +160,8 @@ impl Chip8 {
         self.st -= if self.st > 0 { 1 } else { 0 };
     }
 
-    fn execute_instruction(&mut self, instruction: Chip8Instruction) {
-        use Chip8Instruction::*;
+    fn execute_instruction(&mut self, instruction: Instruction) {
+        use Instruction::*;
         match instruction {
             SYS(_) => todo!(),
             CLS => self.screen = [[false; SCREEN_WIDTH]; SCREEN_HEIGHT],
@@ -202,7 +209,19 @@ impl Chip8 {
             SKPVx(x) => self.pc += if self.keys[self.v[x] as usize] { 2 } else { 0 },
             SKNPVx(x) => self.pc += if !self.keys[self.v[x] as usize] { 2 } else { 0 },
             LDVxDT(x) => self.v[x] = self.dt,
-            LDVxK(_) => todo!(),
+            LDVxK(x) => {
+                let mut key_pressed = None;
+                for (i, pressed) in self.keys.iter().enumerate() {
+                    if *pressed {
+                        key_pressed = Some(i);
+                        break;
+                    }
+                }
+                if let Some(key) = key_pressed {
+                    self.v[x] = key as u8;
+                    self.pc += 2;
+                }
+            }
             LDDTVx(x) => self.dt = self.v[x],
             LDSTVx(x) => self.st = self.v[x],
             ADDIVx(x) => self.index += self.v[x] as usize,

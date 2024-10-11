@@ -1,6 +1,6 @@
 pub type Address = usize;
 
-pub enum Chip8Instruction {
+pub enum Instruction {
     CLS,
     RET,
     SYS(Address),
@@ -39,9 +39,9 @@ pub enum Chip8Instruction {
     Unknown,
 }
 
-impl Chip8Instruction {
+impl Instruction {
     pub fn from_opcode(opcode: u16) -> Self {
-        use Chip8Instruction::*;
+        use Instruction::*;
 
         let first_nibble = (opcode >> 12) & 0xF;
         let x = ((opcode >> 8) & 0xF) as usize;
@@ -104,7 +104,7 @@ impl Chip8Instruction {
     }
 
     pub fn disassemble(&self) -> String {
-        use Chip8Instruction::*;
+        use Instruction::*;
 
         match self {
             CLS => "CLS".to_string(),

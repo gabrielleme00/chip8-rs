@@ -16,7 +16,7 @@ use winit::window::{Window, WindowBuilder};
 const WIDTH: u32 = SCREEN_WIDTH as u32;
 const HEIGHT: u32 = SCREEN_HEIGHT as u32;
 const SCALE: f64 = 12.0;
-const UPS: u32 = 500;
+const UPS: u32 = 100;
 const MAX_FRAME_TIME: f64 = 0.1;
 
 #[derive(Parser, Debug)]
